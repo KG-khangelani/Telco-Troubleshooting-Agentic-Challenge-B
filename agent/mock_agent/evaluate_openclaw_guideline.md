@@ -19,6 +19,7 @@ Before running the script, ensure you have the following installed and configure
 * **Python 3.8+**  
 * **Node.js** (Required to execute the openclaw agent)  
 * **Openclaw Agent:** The openclaw repository must be cloned and accessible on your local machine.
+* **Agent Tool Server:** Run `python server.py` from the repository root and point tools to `http://127.0.0.1:7860/api/agent/execute`.
 
 *Note: Since the script reads from a local file, third-party networking libraries like requests are no longer required.*
 
@@ -80,16 +81,16 @@ Run the script from the command line using various arguments to control the batc
 pip install -r agent/requirements.txt
 
 # Run all questions from the input JSON
-python agent/evaluate_openclaw.py -i data/Phase_1/test.json
+python agent/mock_agent/evaluate_openclaw.py -i data/phase_1/test_p1.json
 
 # Run specific questions only
-python agent/evaluate_openclaw.py -i data/Phase_1/test.json --questions 1,2,5
+python agent/mock_agent/evaluate_openclaw.py -i data/phase_1/test_p1.json --questions 1,2,5
 
 # Run with concurrency (max 2 for competition compliance)
-python agent/evaluate_openclaw.py -i data/Phase_1/test.json --concurrency 2
+python agent/mock_agent/evaluate_openclaw.py -i data/phase_1/test_p1.json --concurrency 2
 
 # Resume from an interrupted run
-python agent/evaluate_openclaw.py -i data/Phase_1/test.json --resume
+python agent/mock_agent/evaluate_openclaw.py -i data/phase_1/test_p1.json --resume
 ```
 
 ## **Output Files**

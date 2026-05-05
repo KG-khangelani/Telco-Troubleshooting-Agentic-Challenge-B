@@ -1,2 +1,15 @@
 *.zip
-/devices_outputs
+/devices_outputs/
+
+# Python/runtime artifacts
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+
+# Local server and agent outputs
+agent_errors.log
+agent/mock_agent/eval_results/
+agent/mock_agent/eval_results/_msg_*.txt
+agent/mock_agent/eval_results/_invoke_wrapper.js

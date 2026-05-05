@@ -543,17 +543,19 @@ display ip pool
 
 If server access issues occur, participants may deploy the Agent Tool Server locally:
 
-1. First, unzip `devices_outputs.zip` inside the same directory
-2. Then, run `python server.py` to deploy the local server.
-3. An example agent workflow is provide in `agent/` folder.
+1. Obtain `devices_outputs.zip` from the challenge dataset. This archive is a local artifact and is intentionally not committed to Git.
+2. Unzip `devices_outputs.zip` at the repository root.
+3. Verify that question folders exist under `devices_outputs/` (for example `devices_outputs/1/...`). The server also supports archives that extract as `devices_outputs/devices_outputs/1/...`.
+4. Run `python server.py` to deploy the local server.
+5. An example agent workflow is provided in `agent/mock_agent/`.
 
-After local deployment, change the Agent's target URL to `http://localhost:7860/api/agent/execute`; no Token required.
+After local deployment, change the Agent's target URL to `http://127.0.0.1:7860/api/agent/execute`; no Token required.
 
 ---
 
 ## Quick Start: Running the Agent with OpenClaw
 
-The `agent/` directory provides a ready-to-use agent solution based on **OpenClaw** (an open-source agentic framework). By combining the pre-configured skills, OpenClaw configuration files, and the batch evaluation script, participants can quickly launch an agent to solve CTBench problems locally.
+The `agent/mock_agent/` directory provides a ready-to-use agent workflow based on **OpenClaw** (an open-source agentic framework). By combining the pre-configured OpenClaw configuration files and the batch evaluation script, participants can launch an agent to solve CTBench problems locally.
 
 ### Prerequisites
 
@@ -564,7 +566,7 @@ The `agent/` directory provides a ready-to-use agent solution based on **OpenCla
 ### Directory Structure
 
 ```
-agent/
+agent/mock_agent/
 ├── openclaw_config/          # OpenClaw configuration files
 │   ├── IDENTITY.md           # Agent identity definition (name, persona)
 │   ├── SOUL.md               # Code of conduct & core principles
@@ -601,19 +603,19 @@ agent/
 
 ```bash
 # Install Python dependencies
-pip install -r agent/requirements.txt
+pip install -r agent/mock_agent/requirements.txt
 
 # Run all questions from the input JSON
-python agent/evaluate_openclaw.py -i data/Phase_1/test.json
+python agent/mock_agent/evaluate_openclaw.py -i data/phase_1/test_p1.json
 
 # Run specific questions only
-python agent/evaluate_openclaw.py -i data/Phase_1/test.json --questions 1,2,5
+python agent/mock_agent/evaluate_openclaw.py -i data/phase_1/test_p1.json --questions 1,2,5
 
 # Run with concurrency (max 2 for competition compliance)
-python agent/evaluate_openclaw.py -i data/Phase_1/test.json --concurrency 2
+python agent/mock_agent/evaluate_openclaw.py -i data/phase_1/test_p1.json --concurrency 2
 
 # Resume from an interrupted run
-python agent/evaluate_openclaw.py -i data/Phase_1/test.json --resume
+python agent/mock_agent/evaluate_openclaw.py -i data/phase_1/test_p1.json --resume
 ```
 
 ### How It Works
@@ -621,11 +623,11 @@ python agent/evaluate_openclaw.py -i data/Phase_1/test.json --resume
 1. **`evaluate_openclaw.py`** loads questions from the input JSON file, then invokes the locally running OpenClaw agent for each question.
 2. The OpenClaw agent, guided by `openclaw_config/` (identity, tools, and behavioral rules), uses the four **skills** to collect device data via the API (`http://127.0.0.1:7860/api/agent/execute`).
 3. The agent analyzes the collected data and produces a final answer.
-4. The script extracts the answer from the OpenClaw session log and writes results to `agent/eval_results/result.csv`.
+4. The script extracts the answer from the OpenClaw session log and writes results to `agent/mock_agent/eval_results/result.csv`.
 
 ### Output
 
-Results are saved under `agent/eval_results/`:
+Results are saved under `agent/mock_agent/eval_results/`:
 
 | File | Description |
 |------|-------------|
@@ -633,4 +635,4 @@ Results are saved under `agent/eval_results/`:
 | `eval_detail.jsonl` | Detailed execution logs per question |
 | `progress.json` | Progress tracking for the `--resume` feature |
 
-For more details on the evaluation script, see [`agent/evaluate_openclaw_guideline.md`](agent/evaluate_openclaw_guideline.md).
+For more details on the evaluation script, see [`agent/mock_agent/evaluate_openclaw_guideline.md`](../agent/mock_agent/evaluate_openclaw_guideline.md).

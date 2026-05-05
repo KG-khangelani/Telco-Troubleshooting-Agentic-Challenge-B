@@ -6,7 +6,7 @@ All tools originate from the skills/ directory and are invoked via the local NOC
 
 ## **NOC API Calling Conventions**
 
-* Endpoint: http://127.0.0.1:5000/api/agent/execute  
+* Endpoint: http://127.0.0.1:7860/api/agent/execute
 * Method: POST  
 * Body: { "device\_name": "...", "command": "...", "question\_number": N }  
 * Proxies must be disabled: s.trust\_env \= False
@@ -79,7 +79,7 @@ for key in \["http\_proxy", "https\_proxy", "HTTP\_PROXY", "HTTPS\_PROXY"\]:
 s \= requests.Session()  
 s.trust\_env \= False
 
-r \= s.post("\[http://127.0.0.1:5000/api/agent/execute\](http://127.0.0.1:5000/api/agent/execute)",  
+r \= s.post("http://127.0.0.1:7860/api/agent/execute",
            json={"device\_name": "Core-Router-01", "command": "display ospf peer", "question\_number": 1},  
            timeout=30)  
 r.raise\_for\_status()  

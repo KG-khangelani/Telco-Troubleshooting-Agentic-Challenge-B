@@ -80,19 +80,29 @@ This task focuses on IP network operations and maintenance. Participants are req
 4. **Phase 3 Submission:** For Phase 3, the organizer deploys the base model on GPU instances; participants only need to submit their fine-tuned weights
 
 ### Phase-specific guidelines
-For more details on Track B - Phase 1, see [`data/Phase_1/README.md`](data/Phase_1/README.md)
+For more details on Track B - Phase 1, see [`documentation/phase_1_doc.md`](documentation/phase_1_doc.md) and [`data/phase_1/test_p1.json`](data/phase_1/test_p1.json)
 
-For more details on Track B - Phase 2, see [`data/Phase_2/README.md`](data/Phase_2/README.md)
+For more details on Track B - Phase 2, see [`documentation/phase_2_doc.md`](documentation/phase_2_doc.md) and [`data/phase_2/test_p2.json`](data/phase_2/test_p2.json)
 
 ### Local Server Deployment
 
 If server access issues occur, participants may deploy the Agent Tool Server locally:
 
-1. First, unzip `devices_outputs.zip` inside the same directory
-2. Then, run `python server.py` to deploy the local server.
-3. An example agent workflow is provide in `agent/` folder.
+1. Obtain `devices_outputs.zip` from the challenge dataset. This archive is a local artifact and is intentionally not committed to Git.
+2. Unzip `devices_outputs.zip` at the repository root.
+3. Verify that question folders exist under `devices_outputs/` (for example `devices_outputs/1/...`). The server also supports archives that extract as `devices_outputs/devices_outputs/1/...`.
+4. Run `python server.py` to deploy the local server.
+5. An example agent workflow is provided in `agent/mock_agent/`.
 
-After local deployment, change the Agent's target URL to `http://localhost:7860/api/agent/execute`; no Token required.
+After local deployment, change the Agent's target URL to `http://127.0.0.1:7860/api/agent/execute`; no Token required.
+
+Before running `agent/mock_agent/evaluate_openclaw.py`, update the `OPENCLAW_DIR` and `OPENCLAW_SESSION_DIR` values in that file for your local OpenClaw installation.
+
+To verify local readiness before running the agent, use:
+
+```bash
+python scripts/check_repo_ready.py
+```
 
 ---
 

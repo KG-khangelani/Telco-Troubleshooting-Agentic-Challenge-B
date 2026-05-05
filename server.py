@@ -7,7 +7,8 @@ from flask import Flask, request, jsonify
 
 # === 0. Initialization & Logging Configuration ===
 app = Flask(__name__)
-TXT_FILE_DIRECTORY = "./devices_outputs"
+REPO_ROOT = os.path.dirname(os.path.abspath(__file__))
+RAW_TXT_FILE_DIRECTORY = os.path.join(REPO_ROOT, "devices_outputs")
 LOG_FILE = "agent_errors.log"
 
 logging.basicConfig(
@@ -22,6 +23,29 @@ logging.basicConfig(
 # question_dir is the question number (e.g., "2") or "others"
 COMMAND_CACHE = {}
 QUESTION_DIRS = set()  # Record question directory names existing under devices_outputs
+
+
+def _looks_like_outputs_root(path):
+    """Return True when path contains question directories such as 1, 2, or others."""
+    if not os.path.isdir(path):
+        return False
+    for name in os.listdir(path):
+        child = os.path.join(path, name)
+        if os.path.isdir(child) and (name == "others" or name.isdigit()):
+            return True
+    return False
+
+
+def _resolve_device_outputs_dir(base_dir):
+    """Support both devices_outputs/{question}/... and devices_outputs/devices_outputs/{question}/..."""
+    if _looks_like_outputs_root(base_dir):
+        return base_dir
+
+    nested_dir = os.path.join(base_dir, "devices_outputs")
+    if _looks_like_outputs_root(nested_dir):
+        return nested_dir
+
+    return base_dir
 
 
 def _preload_command_outputs(base_dir):
@@ -48,17 +72,23 @@ def _preload_command_outputs(base_dir):
                     count += 1
     return count
 
+
+TXT_FILE_DIRECTORY = _resolve_device_outputs_dir(RAW_TXT_FILE_DIRECTORY)
 _loaded_files = _preload_command_outputs(TXT_FILE_DIRECTORY)
 print(f"[*] Preloaded {_loaded_files} command output files into memory (Question directories: {len(QUESTION_DIRS)})")
 
 
 # === GENERATED: QUESTION_LIMITS_CONFIG BEGIN ===
 _QUESTION_LIMITS_CONFIG = {}
-_qlc_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "question_limits_config.json")
-if os.path.exists(_qlc_path):
+_qlc_candidates = [
+    os.path.join(REPO_ROOT, "data", "question_limits_config.json"),
+    os.path.join(REPO_ROOT, "question_limits_config.json"),
+]
+_qlc_path = next((path for path in _qlc_candidates if os.path.exists(path)), None)
+if _qlc_path:
     with open(_qlc_path, "r", encoding="utf-8") as _qlc_f:
         _QUESTION_LIMITS_CONFIG = json.load(_qlc_f)
-    print(f"[*] Loaded question_limits_config.json ({len(_QUESTION_LIMITS_CONFIG)} questions)")
+    print(f"[*] Loaded {os.path.relpath(_qlc_path, REPO_ROOT)} ({len(_QUESTION_LIMITS_CONFIG)} questions)")
 # === GENERATED: QUESTION_LIMITS_CONFIG END ===
 
 
@@ -439,11 +469,12 @@ def execute_command():
 
 
 if __name__ == '__main__':
-    if not os.path.exists(TXT_FILE_DIRECTORY):
-        os.makedirs(TXT_FILE_DIRECTORY)
-        print(f"[*] Created directory for valid echo files: {TXT_FILE_DIRECTORY}")
+    if not os.path.exists(RAW_TXT_FILE_DIRECTORY):
+        os.makedirs(RAW_TXT_FILE_DIRECTORY)
+        print(f"[*] Created directory for valid echo files: {RAW_TXT_FILE_DIRECTORY}")
 
     print(f"[*] Agent Tool Web Server is running...")
+    print(f"[*] Device output directory: {TXT_FILE_DIRECTORY}")
     print(f"[*] Resource simulation engine activated: querying missing files will automatically return device CLI errors")
 
     # Use gunicorn to start in production (via Dockerfile CMD or CLI)
