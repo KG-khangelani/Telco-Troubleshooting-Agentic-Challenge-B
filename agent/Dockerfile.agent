@@ -1,0 +1,17 @@
+FROM node:20-slim
+
+# Install Python and basic utilities since the dataset scripts are in Python
+RUN apt-get update && apt-get install -y \
+    python3 \
+    python3-pip \
+    python3-venv \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# The agent will mount the workspace, so we just set up the environment
+# You can install global node packages like pi-agent here if needed
+# RUN npm install -g pi-agent
+
+CMD ["tail", "-f", "/dev/null"]

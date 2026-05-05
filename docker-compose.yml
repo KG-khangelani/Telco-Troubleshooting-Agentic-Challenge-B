@@ -15,3 +15,16 @@ services:
       timeout: 30s
       retries: 3
       start_period: 60s
+
+  agent:
+    build:
+      context: .
+      dockerfile: agent/Dockerfile.agent
+    image: telco-troubleshooting-track-b-agent:local
+    depends_on:
+      server:
+        condition: service_healthy
+    volumes:
+      - .:/app
+    # Run an infinite loop so the container stays alive, allowing us to exec into it
+    command: tail -f /dev/null
