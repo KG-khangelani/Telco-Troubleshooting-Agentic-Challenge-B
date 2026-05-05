@@ -104,6 +104,31 @@ To verify local readiness before running the agent, use:
 python scripts/check_repo_ready.py
 ```
 
+### Docker Workflow
+
+The recommended local workflow is Docker-first, so Python dependencies stay inside the container. Keep `devices_outputs.zip` and the extracted `devices_outputs/` folder outside Git; the container reads `devices_outputs/` through a read-only bind mount.
+
+The Compose service sets `TELCO_PRELOAD_COMMANDS=0`, so command output files are loaded lazily from the mounted folder. This avoids slow container startup on Docker Desktop when `devices_outputs/` contains many small files.
+
+```bash
+# Build the local server image
+docker compose build
+
+# Run repository readiness checks inside the container
+docker compose run --rm server python scripts/check_repo_ready.py
+
+# Start the Agent Tool Server on http://127.0.0.1:7860
+docker compose up server
+```
+
+In another terminal, run the API smoke test:
+
+```bash
+docker compose exec server python scripts/smoke_server.py
+```
+
+The smoke test calls `POST http://127.0.0.1:7860/api/agent/execute` and verifies both a normal successful command and a no-permission command.
+
 ---
 
 ## Evaluation Metrics & Scoring

@@ -1,0 +1,17 @@
+.git/
+.dockerignore
+
+devices_outputs/
+*.zip
+
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+
+agent_errors.log
+agent/mock_agent/eval_results/
+
+Dockerfile
+docker-compose.yml

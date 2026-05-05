@@ -128,6 +128,10 @@ def check_device_outputs(errors):
 
 
 def check_tracked_artifacts(errors):
+    if not (REPO_ROOT / ".git").exists():
+        ok("git metadata is not present; tracked-artifact check skipped inside container")
+        return
+
     try:
         tracked = git_ls_files()
     except Exception as exc:

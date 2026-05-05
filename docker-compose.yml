@@ -1,0 +1,17 @@
+services:
+  server:
+    build:
+      context: .
+    image: telco-troubleshooting-track-b-server:local
+    ports:
+      - "7860:7860"
+    environment:
+      TELCO_PRELOAD_COMMANDS: "0"
+    volumes:
+      - ./devices_outputs:/app/devices_outputs:ro
+    healthcheck:
+      test: ["CMD", "python", "scripts/smoke_server.py", "--timeout", "10"]
+      interval: 30s
+      timeout: 30s
+      retries: 3
+      start_period: 60s

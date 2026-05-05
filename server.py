@@ -23,6 +23,7 @@ logging.basicConfig(
 # question_dir is the question number (e.g., "2") or "others"
 COMMAND_CACHE = {}
 QUESTION_DIRS = set()  # Record question directory names existing under devices_outputs
+PRELOAD_COMMANDS = os.environ.get("TELCO_PRELOAD_COMMANDS", "1").lower() not in {"0", "false", "no"}
 
 
 def _looks_like_outputs_root(path):
@@ -73,9 +74,33 @@ def _preload_command_outputs(base_dir):
     return count
 
 
+def _question_dir_exists(question_dir_name):
+    return os.path.isdir(os.path.join(TXT_FILE_DIRECTORY, str(question_dir_name)))
+
+
+def _get_command_output(question_dir_name, device_name, filename):
+    cache_key = f"{question_dir_name}/{device_name}/{filename}"
+    content = COMMAND_CACHE.get(cache_key)
+    if content is not None:
+        return content
+
+    filepath = os.path.join(TXT_FILE_DIRECTORY, str(question_dir_name), device_name, filename)
+    if not os.path.isfile(filepath):
+        return None
+
+    with open(filepath, "r", encoding="utf-8") as f:
+        content = f.read()
+    COMMAND_CACHE[cache_key] = content
+    return content
+
+
 TXT_FILE_DIRECTORY = _resolve_device_outputs_dir(RAW_TXT_FILE_DIRECTORY)
-_loaded_files = _preload_command_outputs(TXT_FILE_DIRECTORY)
-print(f"[*] Preloaded {_loaded_files} command output files into memory (Question directories: {len(QUESTION_DIRS)})")
+if PRELOAD_COMMANDS:
+    _loaded_files = _preload_command_outputs(TXT_FILE_DIRECTORY)
+    print(f"[*] Preloaded {_loaded_files} command output files into memory (Question directories: {len(QUESTION_DIRS)})")
+else:
+    _loaded_files = 0
+    print(f"[*] Lazy command output loading enabled (Device output directory: {TXT_FILE_DIRECTORY})")
 
 
 # === GENERATED: QUESTION_LIMITS_CONFIG BEGIN ===
@@ -389,9 +414,8 @@ def execute_command():
     # --- C. Branch: Valid command, query from memory cache ---
     safe_filename = command.replace("/", "_").replace("\\", "_").replace("..", "").replace(" ", "_")
     # Prioritize searching the question number directory, fallback to 'others' directory if it doesn't exist
-    q_dir = str(question_number) if str(question_number) in QUESTION_DIRS else "others"
-    cache_key = f"{q_dir}/{device_name}/{safe_filename}.txt"
-    content = COMMAND_CACHE.get(cache_key)
+    q_dir = str(question_number) if str(question_number) in QUESTION_DIRS or _question_dir_exists(question_number) else "others"
+    content = _get_command_output(q_dir, device_name, f"{safe_filename}.txt")
 
     # === Special handling: Simulate missing physical resources for specific parameterized commands ===
     if content is None:
