@@ -33,6 +33,9 @@ async function solveProblem(problemId, questionText) {
         throw new Error(`Model ${modelName} not found in openrouter provider`);
     }
 
+    // Load the system prompt rules
+    const systemPromptText = fs.readFileSync('/app/AGENTS.md', 'utf8');
+
     // Set up session
     const { session } = await createAgentSession({
         cwd: '/app',
@@ -40,6 +43,7 @@ async function solveProblem(problemId, questionText) {
         model: targetModel,
         tools: [createBashTool('/app'), createReadTool('/app')],
         sessionManager: SessionManager.inMemory(),
+        systemPrompt: systemPromptText
     });
 
     // Subscribe to events for stdout visibility

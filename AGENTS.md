@@ -65,6 +65,10 @@ You must employ these deterministic algorithms to traverse the network. Do not g
 2. Discover adjacent device: `display lldp neighbor brief` to see what is plugged into that interface.
 3. Move to the adjacent switch and repeat step 1.
 
+**CRITICAL RULE - NEVER GUESS HOSTNAMES:**
+If you are at an edge device (like a Linux Client) and do not know the name of the adjacent access switch, **DO NOT GUESS HOSTNAMES** (e.g., trying `GUEST_WIFI_SWITCH_01`, `SW-01`, etc.). This is a waste of time.
+Instead, immediately jump to a known central device like `Core_SW_01` or `Core_SW_02` and run `display lldp neighbor brief`. This will list all connected aggregation and access switches, allowing you to discover the actual device names in the topology without guessing.
+
 If a command fails (e.g. syntax error or device not found), analyze the error and try a different command or vendor syntax.
 
 ### 5. Output Iron Rules
