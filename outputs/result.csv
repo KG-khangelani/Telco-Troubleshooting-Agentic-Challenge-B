@@ -1,1 +1,6 @@
 id,answer
+1,Core_SW_01;Vlanif120;interface IP error
+2,Core_SW_01;Vlanif110;VRRP dual-master configuration error
+3,GUEST_WIFI_CLIENT01;eth0;missing static route
+4,ERROR: Loop limit exceeded
+5,ERROR: Loop limit exceeded

@@ -10,9 +10,10 @@ RUN apt-get update && apt-get install -y \
 
 WORKDIR /app
 
-# Install pi-agent and other required libraries globally so they don't pollute the host workspace
-RUN npm install -g @earendil-works/pi-coding-agent csv-parser typebox
-
-# Ensure global node modules can be required by scripts
-ENV NODE_PATH=/usr/local/lib/node_modules
+# Install pi-agent and other required libraries in the root directory so ESM resolution finds them
+# This keeps them off the host volume mounted at /app
+RUN mkdir /temp_deps && cd /temp_deps && npm init -y && \
+    npm install @earendil-works/pi-coding-agent csv-parser typebox && \
+    mv node_modules /node_modules && \
+    rm -rf /temp_deps
 CMD ["tail", "-f", "/dev/null"]
