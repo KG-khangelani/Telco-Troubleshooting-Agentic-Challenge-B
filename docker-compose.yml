@@ -24,7 +24,30 @@ services:
     depends_on:
       server:
         condition: service_healthy
+    env_file:
+      - .env
     volumes:
       - .:/app
     # Run an infinite loop so the container stays alive, allowing us to exec into it
     command: tail -f /dev/null
+
+  llm:
+    image: vllm/vllm-openai:latest
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./models:/models
+    environment:
+      # Expose a HuggingFace cache folder locally
+      - HUGGING_FACE_HUB_TOKEN=${HF_TOKEN:-}
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    # Replace 'Qwen/Qwen2.5-1.5B-Instruct' with your exact local model path or HuggingFace repo
+    # e.g., --model /models/Qwen3.5-35B-A3B if you downloaded the weights locally
+    # Note: 1.5B model is used by default here because your GPU has 6GB VRAM.
+    command: --model Qwen/Qwen2.5-1.5B-Instruct --host 0.0.0.0 --port 8000 --max-model-len 2048
