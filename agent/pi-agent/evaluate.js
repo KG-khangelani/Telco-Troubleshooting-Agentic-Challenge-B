@@ -13,7 +13,7 @@ import path from 'path';
 import { executeNetworkCommand } from './tools/execute_network_command.js';
 
 // Paths mapped to the docker container volume
-const TEST_FILE = '/app/data/phase_1/test_p1.json';
+const TEST_FILE = '/app/data/phase_2/test_p2.json';
 const OUTPUT_FILE = '/app/outputs/result.csv';
 
 // Load the test questions
@@ -35,8 +35,13 @@ async function solveProblem(problemId, questionText) {
     const LLM_ENDPOINT = process.env.LLM_ENDPOINT || 'http://llm:8000/v1/chat/completions';
     const modelName = process.env.LLM_MODEL || 'qwen3.5-35b';
 
-    // Load System Prompt
-    const systemPrompt = fs.readFileSync('/app/agent/pi-agent/SYSTEM.md', 'utf8');
+    // Load System Prompt dynamically from the modular prompts directory
+    const promptsDir = '/app/agent/pi-agent/prompts';
+    const promptFiles = fs.readdirSync(promptsDir).filter(f => f.endsWith('.md')).sort();
+    let systemPrompt = '';
+    for (const file of promptFiles) {
+        systemPrompt += fs.readFileSync(path.join(promptsDir, file), 'utf8') + '\n\n';
+    }
 
     let messages = [
         { role: "system", content: systemPrompt },
@@ -52,7 +57,7 @@ async function solveProblem(problemId, questionText) {
     }
 
     let loopCount = 0;
-    const maxLoops = 10; // Prevent infinite loops
+    const maxLoops = 30; // Prevent infinite loops, increased for deeper topology discovery
 
     while (loopCount < maxLoops) {
         loopCount++;
@@ -65,21 +70,38 @@ async function solveProblem(problemId, questionText) {
                 body: JSON.stringify({
                     model: modelName,
                     messages: messages,
-                    tools: [{
-                        type: "function",
-                        function: {
-                            name: "execute_network_command",
-                            description: "Executes a CLI command on a specific network device.",
-                            parameters: {
-                                type: "object",
-                                properties: {
-                                    device_name: { type: "string", description: "Name of the device (e.g., Gamma-Aegis-01)" },
-                                    command: { type: "string", description: "CLI command to run (e.g., display interface brief)" }
-                                },
-                                required: ["device_name", "command"]
+                    tools: [
+                        {
+                            type: "function",
+                            function: {
+                                name: "execute_network_command",
+                                description: "Executes a CLI command on a specific network device.",
+                                parameters: {
+                                    type: "object",
+                                    properties: {
+                                        host_awareness_log: { type: "string", description: "Mandatory scratchpad. State your current host, previous host, and your current hypothesis before running the command." },
+                                        device_name: { type: "string", description: "Name of the device (e.g., Gamma-Aegis-01)" },
+                                        command: { type: "string", description: "CLI command to run (e.g., display interface brief)" }
+                                    },
+                                    required: ["host_awareness_log", "device_name", "command"]
+                                }
+                            }
+                        },
+                        {
+                            type: "function",
+                            function: {
+                                name: "sketch_network_topology",
+                                description: "Saves a Mermaid chart of the currently discovered network topology to a file.",
+                                parameters: {
+                                    type: "object",
+                                    properties: {
+                                        mermaid_code: { type: "string", description: "The raw Mermaid syntax (e.g., graph TD\\n  A --> B)." }
+                                    },
+                                    required: ["mermaid_code"]
+                                }
                             }
                         }
-                    }],
+                    ],
                     tool_choice: "auto",
                     temperature: 0.1 // Keep it deterministic
                 })
@@ -96,17 +118,42 @@ async function solveProblem(problemId, questionText) {
 
             // Did the AI decide to call a tool?
             if (responseMessage.tool_calls && responseMessage.tool_calls.length > 0) {
+                if (responseMessage.content) {
+                    const reasoning = responseMessage.content.trim().split('\n').map(line => '      ' + line).join('\n');
+                    console.log(`    [Reasoning]\n${reasoning}`);
+                }
                 const toolCall = responseMessage.tool_calls[0];
                 const args = JSON.parse(toolCall.function.arguments);
+                const toolName = toolCall.function.name;
                 
-                console.log(`    -> Tool call: ${args.command} on ${args.device_name}`);
-                
-                // Execute the tool
-                const toolResult = await executeNetworkCommand(
-                    args.device_name, 
-                    args.command, 
-                    problemId
-                );
+                let toolResult = "";
+
+                if (toolName === "execute_network_command") {
+                    if (args.host_awareness_log) {
+                        const log = args.host_awareness_log.trim().split('\n').map(line => '      ' + line).join('\n');
+                        console.log(`    [Host Awareness Log]\n${log}`);
+                    }
+                    console.log(`    -> Tool call: ${args.command} on ${args.device_name}`);
+                    
+                    toolResult = await executeNetworkCommand(args.device_name, args.command, problemId);
+
+                    // Automatic Rollback Mechanism
+                    const errorIndicators = ["API ERROR", "EXECUTION FAILED", "Unrecognized command", "Invalid input detected", "Error:", "not found"];
+                    const isError = errorIndicators.some(indicator => toolResult.toLowerCase().includes(indicator.toLowerCase()));
+                    
+                    if (isError) {
+                        toolResult += "\n\n[SYSTEM ROLLBACK HINT]: Command execution failed. ROLLBACK your hypothesis to your Previous Host. If you used a Huawei command on a Linux client (or vice versa), correct the syntax based on the OS Awareness rules.";
+                    }
+                } else if (toolName === "sketch_network_topology") {
+                    console.log(`    -> Tool call: sketch_network_topology`);
+                    try {
+                        const topologyFile = `/app/outputs/topology_problem_${problemId}.md`;
+                        fs.writeFileSync(topologyFile, `\`\`\`mermaid\n${args.mermaid_code}\n\`\`\``);
+                        toolResult = `Successfully wrote topology to ${topologyFile}`;
+                    } catch (err) {
+                        toolResult = `Failed to write topology: ${err.message}`;
+                    }
+                }
 
                 // Provide the tool result back to the LLM
                 messages.push({
@@ -152,9 +199,14 @@ async function main() {
             
             // Append to result.csv immediately to save progress
             fs.appendFileSync(OUTPUT_FILE, `${id},${answer}\n`);
-            console.log(`[✔] Problem ${id} solved. Answer: ${answer}`);
+            
+            if (answer.startsWith("ERROR")) {
+                console.error(`[!] Problem ${id} FAILED. Reason: ${answer}\n`);
+            } else {
+                console.log(`[✔] Problem ${id} solved. Answer: ${answer}\n`);
+            }
         } catch (error) {
-            console.error(`[X] Error solving Problem ${id}:`, error);
+            console.error(`[X] System error processing Problem ${id}:`, error);
             // Append empty or error string so the row isn't missing
             fs.appendFileSync(OUTPUT_FILE, `${id},ERROR\n`);
         }
