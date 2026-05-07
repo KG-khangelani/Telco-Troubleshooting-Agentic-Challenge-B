@@ -1,3 +1,7 @@
+---
+description: Output formatting iron rules.
+---
+
 ### 5. Output Iron Rules
 When you reach your conclusion, you MUST:
 - **Only output the final answer**

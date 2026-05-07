@@ -1,4 +1,9 @@
-### 6. Network Topology Sketching Skill
+---
+name: sketch-network-topology
+description: Saves a Mermaid chart of the currently discovered network topology to a file. Use this right before providing your final answer.
+---
+
+# Network Topology Sketching Skill
 You have access to a tool named `sketch_network_topology`. 
 
 As you discover the network using LLDP or routing tables, you should mentally map out the connections.

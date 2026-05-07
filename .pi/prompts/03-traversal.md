@@ -1,3 +1,7 @@
+---
+description: Formal Network Traversal Algorithms.
+---
+
 ### 4. Formal Network Traversal Algorithms
 If you do not know the exact device names in the network, start by querying the source or destination device names explicitly mentioned in the problem description (e.g., `Core_SW_01` or `GUEST_WIFI_CLIENT01`).
 

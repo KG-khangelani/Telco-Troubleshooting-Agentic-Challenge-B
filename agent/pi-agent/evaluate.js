@@ -36,11 +36,17 @@ async function solveProblem(problemId, questionText) {
     const modelName = process.env.LLM_MODEL || 'qwen3.5-35b';
 
     // Load System Prompt dynamically from the modular prompts directory
-    const promptsDir = '/app/agent/pi-agent/prompts';
+    const promptsDir = '/app/.pi/prompts';
     const promptFiles = fs.readdirSync(promptsDir).filter(f => f.endsWith('.md')).sort();
     let systemPrompt = '';
     for (const file of promptFiles) {
         systemPrompt += fs.readFileSync(path.join(promptsDir, file), 'utf8') + '\n\n';
+    }
+
+    // Load SKILL instructions to simulate pi.dev skill injection
+    const skillFile = '/app/.pi/skills/sketch-network-topology/SKILL.md';
+    if (fs.existsSync(skillFile)) {
+        systemPrompt += fs.readFileSync(skillFile, 'utf8') + '\n\n';
     }
 
     let messages = [

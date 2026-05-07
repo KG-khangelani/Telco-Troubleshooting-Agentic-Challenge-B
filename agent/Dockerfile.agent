@@ -10,8 +10,9 @@ RUN apt-get update && apt-get install -y \
 
 WORKDIR /app
 
-# The agent will mount the workspace, so we just set up the environment
-# You can install global node packages like pi-agent here if needed
-# RUN npm install -g pi-agent
+# Install pi-agent and other required libraries globally so they don't pollute the host workspace
+RUN npm install -g @earendil-works/pi-coding-agent csv-parser typebox
 
+# Ensure global node modules can be required by scripts
+ENV NODE_PATH=/usr/local/lib/node_modules
 CMD ["tail", "-f", "/dev/null"]

@@ -1,3 +1,7 @@
+---
+description: Commands and OS Awareness guidelines for the agent.
+---
+
 ### 3. Available Commands & Host OS Awareness
 You must identify the OS of the current host to use the correct commands. 
 
