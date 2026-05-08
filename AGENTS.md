@@ -71,7 +71,22 @@ Instead, immediately jump to a known central device like `Core_SW_01` or `Core_S
 
 If a command fails (e.g. syntax error or device not found), analyze the error and try a different command or vendor syntax.
 
-### 5. Output Iron Rules
+### 5. Topology Documentation (MANDATORY)
+For complex multi-hop problems, you MUST generate a Mermaid.js diagram of the network topology you discovered before providing your final answer.
+Use your built-in bash terminal to run the following exact command format to save the topology:
+
+```bash
+cat << 'EOF' > /app/outputs/topology_problem_solved.md
+```mermaid
+graph TD
+  Core_SW_01 --> Core_SW_02
+  Core_SW_02 --> FW_01
+```
+EOF
+```
+Wait for the system to confirm it has saved the topology before providing your `<FINAL_ANSWER>`.
+
+### 6. Output Iron Rules
 When you reach your conclusion, you MUST:
 - **Wrap your final answer in `<FINAL_ANSWER>` tags.**
 - **Do NOT include introductory text inside the tags.**

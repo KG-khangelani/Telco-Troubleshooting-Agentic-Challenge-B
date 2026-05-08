@@ -135,11 +135,29 @@ async function solveProblem(problemId, questionText) {
                 // Strip any hallucinated --host or --command flags
                 commandToRun = commandToRun.replace(/--host\s+/g, '').replace(/--command\s+/g, '');
                 
+                // Polyfill for Sketch Network Topology
+                const catRegex = /cat\s+<<\s*['"]?EOF['"]?\s*>\s*([^\s]+)\s*\r?\n([\s\S]*?)\r?\nEOF/;
+                const catMatch = commandToRun.match(catRegex);
+                
                 // Polyfill: Natively extract device and command, and run executeNetworkCommand directly
                 const netCmdRegex = /execute_network_command(?:\.js)?\s+["']?([^"'\s]+)["']?\s+["'](.*)["']/;
                 const netMatch = commandToRun.match(netCmdRegex);
 
-                if (netMatch) {
+                if (catMatch) {
+                    const filePath = catMatch[1];
+                    const fileContent = catMatch[2];
+                    console.log(`\n    [Manual Tool Intercept] Saving Topology -> File: ${filePath}`);
+                    try {
+                        const targetPath = path.isAbsolute(filePath) ? filePath : path.join('/app', filePath);
+                        fs.mkdirSync(path.dirname(targetPath), { recursive: true });
+                        fs.writeFileSync(targetPath, fileContent);
+                        console.log(`    [Tool Result] success\n`);
+                        currentPrompt = `Topology saved successfully to ${filePath}. Analyze the topology and decide your next step.`;
+                    } catch (err) {
+                        console.log(`    [Tool Result] error\n`);
+                        currentPrompt = `Failed to save topology. Error: ${err.message}`;
+                    }
+                } else if (netMatch) {
                     const device = netMatch[1];
                     const cmd = netMatch[2];
                     console.log(`\n    [Manual Tool Intercept] Calling API -> Device: ${device}, Command: ${cmd}`);
@@ -155,7 +173,7 @@ async function solveProblem(problemId, questionText) {
                 } else {
                     // It's a bash command but not a valid network command format.
                     console.log(`\n    [Manual Tool Intercept] Invalid command format: ${commandToRun}`);
-                    currentPrompt = `ERROR: Invalid command format or forbidden local shell command.\nYou MUST use the exact format: \`execute_network_command.js <DEVICE_NAME> "<COMMAND>"\`.\nFor example: \`execute_network_command.js Core_SW_01 "display interface brief"\`.\nDo NOT explore the local filesystem or run commands like 'ls', 'find', or 'unzip'. All data must be gathered through the network command API.`;
+                    currentPrompt = `ERROR: Invalid command format or forbidden local shell command.\nYou MUST use the exact format: \`execute_network_command.js <DEVICE_NAME> "<COMMAND>"\`.\nFor example: \`execute_network_command.js Core_SW_01 "display interface brief"\`.\nDo NOT explore the local filesystem or run commands like 'ls', 'find', or 'unzip'. All data must be gathered through the network command API.\nIf you are trying to save a topology, use the exact format:\ncat << 'EOF' > /app/outputs/topology_problem_${problemId}.md\n<content>\nEOF`;
                 }
             } else {
                 // The model output text but neither a bash block nor a FINAL_ANSWER tag.
