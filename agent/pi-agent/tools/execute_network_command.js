@@ -20,6 +20,17 @@
  * @param {number|string} questionNumber - The current question ID / scenario ID
  * @returns {Promise<string>} The CLI string output from the device
  */
+
+// Persistent cache for topology discovery (LLDP) across problems
+const lldpCache = new Map();
+
+function normalizeCommand(cmd) {
+    let normalized = cmd.trim();
+    // Normalize pipe spaces
+    normalized = normalized.replace(/\s+\|\s+/g, ' | ');
+    return normalized;
+}
+
 export async function executeNetworkCommand(deviceName, command, questionNumber) {
     // Bypass self-signed cert errors if the competition URL is a direct IP address via HTTPS
     process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
@@ -39,6 +50,15 @@ export async function executeNetworkCommand(deviceName, command, questionNumber)
 
     const maxRetries = 5;
     const baseDelayMs = 2000;
+
+    const normalizedCmd = normalizeCommand(command);
+    const isLldp = normalizedCmd.includes('lldp neighbor');
+    const cacheKey = `${deviceName}:${normalizedCmd}`;
+
+    if (isLldp && lldpCache.has(cacheKey)) {
+        console.log(`    [Cache Hit] Returning cached LLDP data for ${deviceName}`);
+        return lldpCache.get(cacheKey);
+    }
 
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
         try {
@@ -67,8 +87,38 @@ export async function executeNetworkCommand(deviceName, command, questionNumber)
             const data = await response.json();
             
             if (data.status === 'success') {
+                if (isLldp) {
+                    lldpCache.set(cacheKey, data.result);
+                }
                 return data.result;
             } else {
+                // Vendor Normalization fallback: if command fails due to syntax and contains a pipe, retry without pipe
+                if ((data.message?.toLowerCase().includes('unrecognized') || 
+                     data.message?.toLowerCase().includes('syntax') ||
+                     JSON.stringify(data).toLowerCase().includes('error')) && 
+                     normalizedCmd.includes('|')) {
+                    
+                    const cmdWithoutPipe = normalizedCmd.split('|')[0].trim();
+                    console.log(`    [Vendor Normalization] Command failed with pipe filter. Retrying without pipe: ${cmdWithoutPipe}`);
+                    // Execute without pipe
+                    const retryResponse = await fetch(API_URL, {
+                        method: 'POST',
+                        headers: headers,
+                        body: JSON.stringify({
+                            device_name: deviceName,
+                            command: cmdWithoutPipe,
+                            question_number: String(questionNumber)
+                        })
+                    });
+                    
+                    if (retryResponse.ok) {
+                        const retryData = await retryResponse.json();
+                        if (retryData.status === 'success') {
+                            return retryData.result + "\n\n[Note: Pipe filter was stripped due to device syntax error. Full output provided.]";
+                        }
+                    }
+                }
+                
                 return `EXECUTION FAILED: ${data.message || JSON.stringify(data)}`;
             }
 

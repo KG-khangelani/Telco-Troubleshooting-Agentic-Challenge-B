@@ -1,19 +1,8 @@
 ```mermaid
-graph TD
-  Core_SW_01 --> Core_SW_02
-  Core_SW_01 --> AGG_SW_01
-  Core_SW_01 --> AGG_SW_02
-  Core_SW_01 --> AGG_SW_03
-  Core_SW_01 --> AGG_SW_04
-  Core_SW_01 --> FW_01
-  Core_SW_01 --> FW_02
-  AGG_SW_01 --> HQ_MKT_PC01
-  AGG_SW_01 --> HQ_MKT_AP01
-  AGG_SW_01 --> HQ_MKT_Client01
-  AGG_SW_02 --> HQ_FIN_PC01
-  AGG_SW_02 --> HQ_FIN_Client01
-  AGG_SW_03 --> HQ_HR_PC01
-  AGG_SW_03 --> HQ_HR_AP01
-  AGG_SW_04 --> HQ_PROC_PC01
-  AGG_SW_04 --> HQ_PROC_AP01
+graph LR
+  Core_SW_01---Core_SW_02
+  note1[Core_SW_01 Vlanif120 IP: 10.1.120.253]
+  note2[Core_SW_02 Vlanif120 IP: 10.1.120.253]
+  note1---VRRP_Dual_Master[Fault: VRRP Dual-Master on Vlanif120]
+  note2---VRRP_Dual_Master
 ```

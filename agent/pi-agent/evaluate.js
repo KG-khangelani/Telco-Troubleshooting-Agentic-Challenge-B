@@ -88,6 +88,21 @@ async function solveProblem(problemId, questionText) {
                 }
             }
 
+            // Extract and save Mermaid topologies
+            const mermaidRegex = /```mermaid\n([\s\S]*?)\n```/;
+            const mermaidMatch = answer.match(mermaidRegex);
+            if (mermaidMatch) {
+                const mermaidContent = "```mermaid\n" + mermaidMatch[1].trim() + "\n```\n";
+                const filePath = `/app/outputs/topology_problem_${problemId}.md`;
+                try {
+                    fs.mkdirSync(path.dirname(filePath), { recursive: true });
+                    fs.writeFileSync(filePath, mermaidContent);
+                    console.log(`\n    [Manual Tool Intercept] Saved Topology -> File: ${filePath}`);
+                } catch (err) {
+                    console.error(`\n    [Manual Tool Intercept] Failed to save topology: ${err.message}`);
+                }
+            }
+
             // 1. Check if the model has provided a final answer
             const finalAnswerMatch = answer.match(/<FINAL_ANSWER>([\s\S]*?)<\/FINAL_ANSWER>/);
             if (finalAnswerMatch) {
@@ -135,29 +150,11 @@ async function solveProblem(problemId, questionText) {
                 // Strip any hallucinated --host or --command flags
                 commandToRun = commandToRun.replace(/--host\s+/g, '').replace(/--command\s+/g, '');
                 
-                // Polyfill for Sketch Network Topology
-                const catRegex = /cat\s+<<\s*['"]?EOF['"]?\s*>\s*([^\s]+)\s*\r?\n([\s\S]*?)\r?\nEOF/;
-                const catMatch = commandToRun.match(catRegex);
-                
                 // Polyfill: Natively extract device and command, and run executeNetworkCommand directly
                 const netCmdRegex = /execute_network_command(?:\.js)?\s+["']?([^"'\s]+)["']?\s+["'](.*)["']/;
                 const netMatch = commandToRun.match(netCmdRegex);
 
-                if (catMatch) {
-                    const filePath = catMatch[1];
-                    const fileContent = catMatch[2];
-                    console.log(`\n    [Manual Tool Intercept] Saving Topology -> File: ${filePath}`);
-                    try {
-                        const targetPath = path.isAbsolute(filePath) ? filePath : path.join('/app', filePath);
-                        fs.mkdirSync(path.dirname(targetPath), { recursive: true });
-                        fs.writeFileSync(targetPath, fileContent);
-                        console.log(`    [Tool Result] success\n`);
-                        currentPrompt = `Topology saved successfully to ${filePath}. Analyze the topology and decide your next step.`;
-                    } catch (err) {
-                        console.log(`    [Tool Result] error\n`);
-                        currentPrompt = `Failed to save topology. Error: ${err.message}`;
-                    }
-                } else if (netMatch) {
+                if (netMatch) {
                     const device = netMatch[1];
                     const cmd = netMatch[2];
                     console.log(`\n    [Manual Tool Intercept] Calling API -> Device: ${device}, Command: ${cmd}`);
@@ -202,8 +199,8 @@ async function main() {
     // Initialize CSV with headers (Competition requires id,answer)
     fs.writeFileSync(OUTPUT_FILE, 'id,answer\n');
 
-    // Process questions sequentially (For testing, let's just do 5)
-    for (const item of questions.slice(0, 5)) {
+    // Process questions sequentially
+    for (const item of questions) {
         const id = item.task.id;
         const questionText = item.task.question;
 
