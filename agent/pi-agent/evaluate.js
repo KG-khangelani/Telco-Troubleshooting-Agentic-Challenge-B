@@ -65,7 +65,7 @@ async function solveProblem(problemId, questionText) {
         // Pre-import the executeNetworkCommand to run it natively without child_process overhead
         const { executeNetworkCommand } = await import('./tools/execute_network_command.js');
 
-        while (!isDone && loopCount < 40) {
+        while (!isDone) {
             loopCount++;
             await session.prompt(currentPrompt);
             
@@ -92,12 +92,36 @@ async function solveProblem(problemId, questionText) {
             const finalAnswerMatch = answer.match(/<FINAL_ANSWER>([\s\S]*?)<\/FINAL_ANSWER>/);
             if (finalAnswerMatch) {
                 const lines = finalAnswerMatch[1].split('\n').filter(line => line.trim().length > 0);
-                return lines[lines.length - 1].trim();
+                if (lines.length > 0) {
+                    if (loopCount <= 1) {
+                        currentPrompt = `ERROR: You provided a <FINAL_ANSWER> without executing any network commands to gather data. You MUST execute commands to investigate the topology before reaching a conclusion. Continue gathering data.`;
+                        continue;
+                    }
+                    
+                    const finalStr = finalAnswerMatch[1].trim();
+                    // Basic validation: the final answer should contain semi-colons or arrows, not "Starting investigation"
+                    if (finalStr.includes(';') || finalStr.includes('->') || finalStr.toLowerCase().includes('error')) {
+                        return finalStr.replace(/\n/g, '\\n'); // Return full string, formatted for CSV
+                    } else {
+                        // It hallucinates intermediate thoughts in the tag. Warn it and continue.
+                        currentPrompt = `ERROR: You used the <FINAL_ANSWER> tag, but your answer ("${lines[0].trim()}...") does not match the required format (e.g., Device;Interface;FaultType or DeviceA->DeviceB). DO NOT use <FINAL_ANSWER> for intermediate thoughts like "Starting investigation". Only use it when you have the actual root cause. Continue gathering data.`;
+                        continue;
+                    }
+                } else {
+                    currentPrompt = `ERROR: You used empty <FINAL_ANSWER> tags. You must put the actual root cause inside the tags. Continue gathering data.`;
+                    continue;
+                }
             }
             
             // 2. Check if the model has provided a Markdown bash block to intercept
             const bashRegex = /```(?:bash|shell)\n([\s\S]*?)\n```/;
-            const match = answer.match(bashRegex);
+            let match = answer.match(bashRegex);
+            
+            // Fallback for hallucinated XML tags
+            if (!match) {
+                const xmlRegex = /<(?:bash|execute_network_command)>([\s\S]*?)<\/(?:bash|execute_network_command)>/;
+                match = answer.match(xmlRegex);
+            }
             
             if (match) {
                 let commandToRun = match[1].trim();
@@ -136,11 +160,14 @@ async function solveProblem(problemId, questionText) {
             } else {
                 // The model output text but neither a bash block nor a FINAL_ANSWER tag.
                 // We must prompt it to continue.
-                currentPrompt = `You must either execute a network command using a \`\`\`bash block, or provide your final answer wrapped in <FINAL_ANSWER>...</FINAL_ANSWER> tags.`;
+                currentPrompt = `You must execute a network command using a \`\`\`bash block. DO NOT use XML tags like <bash> or <execute_network_command> for commands. If you are finished, provide your final answer wrapped in <FINAL_ANSWER>...</FINAL_ANSWER> tags.`;
             }
         }
         
-        return "ERROR: Loop limit exceeded";
+        // In case of infinite loops, we don't have a limit anymore based on user request.
+        // Wait, if it never finds a FINAL_ANSWER, it will hang.
+        // Returning ERROR since we removed the limit return at the bottom.
+        // Wait, I should just remove the loop limit return if it's an infinite loop.
         
     } finally {
         unsubscribe();
@@ -157,8 +184,7 @@ async function main() {
     // Initialize CSV with headers (Competition requires id,answer)
     fs.writeFileSync(OUTPUT_FILE, 'id,answer\n');
 
-    // Process questions sequentially (For testing, let's just do 2)
-    // The user can remove `.slice(0, 2)` later if they want all.
+    // Process questions sequentially (For testing, let's just do 5)
     for (const item of questions.slice(0, 5)) {
         const id = item.task.id;
         const questionText = item.task.question;

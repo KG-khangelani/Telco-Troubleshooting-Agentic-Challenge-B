@@ -1,6 +1,6 @@
 id,answer
-1,Core_SW_01;Vlanif120;VRRP dual-master configuration error
-2,Core_SW_02;Vlanif110;VRRP configuration error
-3,ERROR: Loop limit exceeded
-4,Starting investigation.
-5,SH_FAC_PC01_eth01;SH_FAC_PC01;L3VPN configuration error
+1,Core_SW_01;GE1/0/0;shutdown\nCore_SW_01;GE1/0/7;shutdown\nCore_SW_01;Vlanif120;VRRP dual-master
+2,Core_SW_01;Vlanif110;VRRP preempt configuration mismatch causing dual-master
+3,Core_SW_01;10.1.60.2;missing VLAN configuration
+4,AGG_SW_01;10.3.20.0/24;missing static route configuration
+5,FW_01;deny_Guest_TO_SH_SZ;security policy rule not permitting corresponding users\nFW_02;deny_Guest_TO_SH_SZ;security policy rule not permitting corresponding users
