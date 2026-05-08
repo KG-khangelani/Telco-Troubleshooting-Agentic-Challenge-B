@@ -1,12 +1,1 @@
 id,answer
-1,Core_SW_01;Vlanif120;interface IP error
-2,Core_SW_01;Vlanif110;VRRP dual-master configuration error\nCore_SW_02;Vlanif110;VRRP dual-master configuration error
-3,Core_SW_01;10.1.60.0/24;missing network configuration
-5,FW_01;10.2.20.1;securitypolicydeny_Guest_TO_SH_SZblocksGUESTtoSH
-4,SZ_AR;10.3.20.0/24;static route with unreachable next-hop (missing outbound interface)
-4,Core_SW_01;Vlanif120;10.1.120.253/24 - GUEST VLAN Gateway;AGG_SW_01:trunk_HGE1/0/1-2:VLAN120;AGG_SW_03:trunk_HGE1/0/1-2:VLAN120;AGG_SW_04:trunk_HGE1/0/1-2:VLAN120;GUEST-APs:trunk_HGE1/0/4:VLAN100,110,120-PVID100;MAC_cada-7417-89f4:VLAN120;Core_SW_01_GE1/0/5;AGG_SW_03
-5,PE1;No BGP configuration;BGP misconfiguration\nPE2;No BGP configuration;BGP misconfiguration
-5,Core_SW_01;GE1/0/5;stp_discarding
-6,AGG_SW_01;none;no-routing-protocol\nAGG_SW_02;none;no-routing-protocol\nAGG_SW_03;none;no-routing-protocol\nAGG_SW_04;none;no-routing-protocol
-7,FW_01;deny_Guest_TO_SH_SZ;L3VPNconfigurationerror
-6,AGG_SW_01;no routing information;OSPF configuration error\nAGG_SW_02;no routing information;OSPF configuration error\nAGG_SW_03;no routing information;OSPF configuration error\nAGG_SW_04;no routing information;OSPF configuration error

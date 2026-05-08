@@ -15,6 +15,9 @@ const questions = JSON.parse(fs.readFileSync(TEST_FILE, 'utf8'));
 async function solveProblem(problemId, questionText) {
     console.log(`\n[+] Starting Agent loop for Problem ID: ${problemId}`);
     
+    // Set OpenRouter session tracking ID for the pi-agent SDK models.json header resolution
+    process.env.OPENROUTER_SESSION_ID = `Problem-${problemId}`;
+    
     // Configure API Key and Model Registry
     const authStorage = AuthStorage.create();
     const apiKey = process.env.LLM_API_KEY || process.env.OPENROUTER_API_KEY;
@@ -151,12 +154,22 @@ async function solveProblem(problemId, questionText) {
                 commandToRun = commandToRun.replace(/--host\s+/g, '').replace(/--command\s+/g, '');
                 
                 // Polyfill: Natively extract device and command, and run executeNetworkCommand directly
-                const netCmdRegex = /execute_network_command(?:\.js)?\s+["']?([^"'\s]+)["']?\s+["'](.*)["']/;
+                const netCmdRegex = /execute_network_command(?:\.js)?\s+["']?([^"'\s]+)["']?\s+(.*)/;
                 const netMatch = commandToRun.match(netCmdRegex);
 
                 if (netMatch) {
                     const device = netMatch[1];
-                    const cmd = netMatch[2];
+                    let cmd = netMatch[2].trim();
+                    
+                    // Extract content inside the first set of quotes, ignoring trailing bash redirects
+                    const quoteMatch = cmd.match(/^["'](.*?)["']/);
+                    if (quoteMatch) {
+                        cmd = quoteMatch[1];
+                    } else {
+                        // Fallback: strip standard bash redirects if there were no quotes
+                        cmd = cmd.split(' 2>')[0].split(' >')[0].trim();
+                    }
+                    
                     console.log(`\n    [Manual Tool Intercept] Calling API -> Device: ${device}, Command: ${cmd}`);
                     
                     try {
@@ -199,8 +212,8 @@ async function main() {
     // Initialize CSV with headers (Competition requires id,answer)
     fs.writeFileSync(OUTPUT_FILE, 'id,answer\n');
 
-    // Process questions sequentially
-    for (const item of questions) {
+    // Process questions sequentially (limited to 5 per user request)
+    for (const item of questions.slice(0, 5)) {
         const id = item.task.id;
         const questionText = item.task.question;
 
