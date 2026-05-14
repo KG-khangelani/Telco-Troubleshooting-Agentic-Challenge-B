@@ -2,5 +2,10 @@ id,answer
 1,Core_SW_01;Vlanif120;VRRP dual-master configuration error
 2,Core_SW_01;Vlanif110;VRRP dual-master configuration error\nCore_SW_02;Vlanif110;VRRP dual-master configuration error
 3,Core_SW_01;10.1.60.2;missing static route
-4,FW_01;10.3.20.1;security policy rule not permitting corresponding users
-5,FW_01;10.2.20.1;security policy rule not permitting corresponding users
+4,FW_01;10.3.20.0/24;security policy rule not permitting corresponding users
+5,FW_01;10.2.20.0/24;security policy rule not permitting corresponding users
+6,FW_01;10.3.30.0/24;security policy rule not permitting corresponding users
+7,FW_01;10.3.10.0/24;security policy rule not permitting corresponding users
+8,FW_01;10.2.10.0/24;security policy rule not permitting corresponding users
+9,FW_01;10.2.30.0/24;security policy rule not permitting corresponding users
+10,AGG_SW_01;HundredGigE1/0/4;interface VLAN configuration error

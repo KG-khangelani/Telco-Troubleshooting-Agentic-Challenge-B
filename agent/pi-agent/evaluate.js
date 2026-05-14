@@ -4,7 +4,7 @@ import { createAgentSession, AuthStorage, ModelRegistry, SessionManager, createB
 
 // Paths mapped to the docker container volume
 const TEST_FILE = '/app/data/phase_2/test_p2.json';
-const OUTPUT_FILE = '/app/outputs/result.csv';
+const OUTPUT_FILE = process.env.OUTPUT_FILE || '/app/outputs/result.csv';
 const QUESTION_LIMIT = Number.parseInt(process.env.QUESTION_LIMIT || '5', 10);
 const MAX_AGENT_LOOPS = Number.parseInt(process.env.MAX_AGENT_LOOPS || '40', 10);
 const FINALIZE_AFTER_LOOPS = Number.parseInt(process.env.FINALIZE_AFTER_LOOPS || '28', 10);
@@ -48,6 +48,9 @@ function buildAnswerRules(allowedReasons) {
 - For multiple faults, put each fault on its own line inside one <FINAL_ANSWER> block.
 - The fault-reason must exactly match one of the allowed strings below. Do not invent shorthand, camelCase, underscores, policy names, or merged words.
 - Common rewrites: "dual-master" -> "VRRP dual-master configuration error"; "missing route" -> choose "missing static route" or "static route error" based on evidence; "securitypolicy", "securitypolicydeny", or a policy name -> "security policy rule not permitting corresponding users".
+- Output the minimal root-cause set. If an upstream gateway/core has no route to the destination, do not add downstream firewall policy faults.
+- Only output "missing static route" after checking that node's routing table and confirming no specific route and no usable default route for the destination.
+- Do not infer "port STP not enabled" from up(sd) in interface brief. If the port appears in STP brief output, STP is enabled there.
 
 Allowed fault-reason strings:
 ${allowedReasons.map(reason => `- ${reason}`).join('\n')}`;
@@ -58,6 +61,13 @@ function buildInvestigationHints(questionText) {
     if (/GUEST|WIFI|CLIENT/i.test(questionText) && /data center|branch|SZ_|SH_|10\.2\.|10\.3\./i.test(questionText)) {
         hints.push('For guest/user traffic to data-center or branch prefixes, verify the client gateway and core route, then check FW_01/FW_02 route and security policy before deep endpoint or access-switch tracing.');
         hints.push('If the firewall has a deny rule or no permit for the source users to the destination prefix, finalize with the exact reason "security policy rule not permitting corresponding users".');
+    }
+
+    hints.push('Minimal-root-cause rule: if the current gateway/core has no matching route or default route for the destination, stop at that routing fault and do not add firewall/security-policy faults behind it.');
+
+    if (/intermittently|lagging|high latency/i.test(questionText) && /GoogleWebServer|BaiduWebServer|114\.114\.114\.114|8\.8\.8\.8|internet/i.test(questionText)) {
+        hints.push('For intermittent/lagging internet failures, do not stop at "missing static route" when the gateway/core has a default route. After route and firewall-policy checks pass, use ARP/MAC evidence to identify the real source-side aggregation/AP port and inspect interface brief, STP, and logbuffer for port symptoms.');
+        hints.push('For wireless/AP paths, LLDP_PVID_INCONSISTENT or VLAN/PVID mismatch on the AP-facing aggregation port maps to the exact reason "interface VLAN configuration error".');
     }
 
     if (hints.length === 0) {
@@ -114,6 +124,66 @@ function validateFinalAnswer(finalStr, allowedReasons) {
 
         if (!allowedReasonSet.has(reason)) {
             errors.push(`Fault reason "${reason}" is not an exact allowed fault-reason string.`);
+        }
+    }
+
+    return { isValid: errors.length === 0, errors };
+}
+
+function routeOutputHasDefault(output) {
+    return /(^|\n)\s*0\.0\.0\.0\/0\b/i.test(output)
+        || /\bGateway of last resort\b/i.test(output)
+        || /(^|\n)\s*S\*?\s+0\.0\.0\.0\/0\b/i.test(output)
+        || /(^|\n)\s*O(?:_ASE)?\s+0\.0\.0\.0\/0\b/i.test(output);
+}
+
+function escapeRegExp(value) {
+    return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function validateEvidenceBackedFinalAnswer(finalStr, commandLog) {
+    const errors = [];
+    const lines = splitFinalAnswerLines(finalStr);
+
+    for (const line of lines) {
+        if (line.includes('->')) {
+            continue;
+        }
+
+        const fields = line.split(';').map(field => field.trim());
+        if (fields.length !== 3) {
+            continue;
+        }
+
+        const [node, target, reason] = fields;
+        if (reason !== 'missing static route') {
+            if (reason === 'port STP not enabled') {
+                const stpChecks = commandLog.filter(entry =>
+                    entry.device === node
+                    && /^(display stp brief|show spanning-tree brief)(\s|$)/.test(entry.command)
+                );
+
+                if (stpChecks.length === 0) {
+                    errors.push(`Line "${line}" claims "port STP not enabled" but no STP brief command was executed on ${node}. Run STP evidence first.`);
+                } else if (stpChecks.some(entry => new RegExp(`\\b${escapeRegExp(target)}\\b`, 'i').test(entry.output))) {
+                    errors.push(`Line "${line}" claims "port STP not enabled", but ${node}'s STP output includes ${target}, so STP is enabled there. Do not infer this from up(sd); for intermittent wireless/AP issues, inspect the source aggregation logbuffer for PVID/VLAN, CRC, or topology events.`);
+                }
+            }
+            continue;
+        }
+
+        const routeChecks = commandLog.filter(entry =>
+            entry.device === node
+            && /^(display ip routing-table|show ip route)(\s|$)/.test(entry.command)
+        );
+
+        if (routeChecks.length === 0) {
+            errors.push(`Line "${line}" claims "missing static route" but no routing-table command was executed on ${node}. Run the route check first or choose a reason supported by existing evidence.`);
+            continue;
+        }
+
+        if (routeChecks.some(entry => routeOutputHasDefault(entry.output))) {
+            errors.push(`Line "${line}" claims "missing static route", but ${node}'s routing-table output includes a default route covering ${target}. Continue investigating the next hop, policy, NAT, or port symptoms.`);
         }
     }
 
@@ -223,7 +293,8 @@ async function solveProblem(problemId, questionText) {
         let loopCount = 0;
         let finalAnswerRetries = 0;
         const commandCache = new Map();
-        let currentPrompt = `Solve this problem:\n${questionText}\n\n${answerRules}\n\n${investigationHints ? `${investigationHints}\n\n` : ''}You must use a markdown bash block to execute network commands and gather data. You cannot solve this without gathering data first.\nUse this exact command format inside the bash block: \`execute_network_command.js <DEVICE_NAME> "<COMMAND>"\`.\nKeep the investigation focused; once you have evidence for the minimal root cause set, stop collecting data.\nWhen you have finally reached your conclusion, output the final answer wrapped in <FINAL_ANSWER> tags as instructed in your rules, and do not call any more tools.`;
+        const commandLog = [];
+        let currentPrompt = `Solve this problem:\n${questionText}\n\n${answerRules}\n\n${investigationHints ? `${investigationHints}\n\n` : ''}You must use a markdown bash block to execute network commands and gather data. You cannot solve this without gathering data first.\nUse this exact command format inside the bash block: \`execute_network_command.js <DEVICE_NAME> "<COMMAND>"\`.\nUse only remote-device commands, not shell filters: no pipes, grep, include filters, command substitution, or local filesystem commands.\nKeep the investigation focused; once you have evidence for the minimal root cause set, stop collecting data.\nWhen you have finally reached your conclusion, output the final answer wrapped in <FINAL_ANSWER> tags as instructed in your rules, and do not call any more tools.`;
 
         // Pre-import the executeNetworkCommand to run it natively without child_process overhead
         const { executeNetworkCommand } = await import('./tools/execute_network_command.js');
@@ -286,16 +357,24 @@ async function solveProblem(problemId, questionText) {
                     
                     const finalStr = finalAnswerMatch[1].trim();
                     const validation = validateFinalAnswer(finalStr, allowedReasons);
-                    if (validation.isValid) {
+                    const evidenceValidation = validation.isValid
+                        ? validateEvidenceBackedFinalAnswer(finalStr, commandLog)
+                        : { isValid: true, errors: [] };
+                    const combinedValidation = {
+                        isValid: validation.isValid && evidenceValidation.isValid,
+                        errors: [...validation.errors, ...evidenceValidation.errors]
+                    };
+
+                    if (combinedValidation.isValid) {
                         return finalStr.replace(/\n/g, '\\n'); // Return full string, formatted for CSV
                     }
 
                     finalAnswerRetries++;
                     if (finalAnswerRetries > MAX_FINAL_ANSWER_RETRIES) {
-                        return `ERROR: Invalid final answer after ${MAX_FINAL_ANSWER_RETRIES} retries: ${validation.errors.join(' | ')}`;
+                        return `ERROR: Invalid final answer after ${MAX_FINAL_ANSWER_RETRIES} retries: ${combinedValidation.errors.join(' | ')}`;
                     }
 
-                    currentPrompt = buildFinalAnswerCorrectionPrompt(finalStr, validation, allowedReasons);
+                    currentPrompt = buildFinalAnswerCorrectionPrompt(finalStr, combinedValidation, allowedReasons);
                     continue;
                 } else {
                     currentPrompt = `ERROR: You used empty <FINAL_ANSWER> tags. You must put the actual root cause inside the tags. Continue gathering data.`;
@@ -318,21 +397,31 @@ async function solveProblem(problemId, questionText) {
                 
                 // If model put the awareness log inside the bash block, extract just the command line
                 const cmdLines = commandToRun.split('\n').filter(l => l.includes('execute_network_command'));
-                if (cmdLines.length > 0) {
-                    commandToRun = cmdLines[0].trim();
-                }
+                const commandLines = (cmdLines.length > 0 ? cmdLines : [commandToRun])
+                    .map(line => line.trim())
+                    .filter(Boolean)
+                    .slice(0, 3);
 
-                // Strip any hallucinated --host or --command flags
-                commandToRun = commandToRun.replace(/--host\s+/g, '').replace(/--command\s+/g, '');
-                
-                // Polyfill: Natively extract device and command, and run executeNetworkCommand directly
+                const outputs = [];
+                const repeatedCommands = [];
+                const invalidCommands = [];
                 const netCmdRegex = /execute_network_command(?:\.js)?\s+["']?([^"'\s]+)["']?\s+(.*)/;
-                const netMatch = commandToRun.match(netCmdRegex);
 
-                if (netMatch) {
+                for (let rawCommandLine of commandLines) {
+                    // Strip any hallucinated --host or --command flags
+                    rawCommandLine = rawCommandLine.replace(/--host\s+/g, '').replace(/--command\s+/g, '');
+
+                    // Polyfill: Natively extract device and command, and run executeNetworkCommand directly
+                    const netMatch = rawCommandLine.match(netCmdRegex);
+
+                    if (!netMatch) {
+                        invalidCommands.push(rawCommandLine);
+                        continue;
+                    }
+
                     const device = netMatch[1];
                     let cmd = netMatch[2].trim();
-                    
+
                     // Extract content inside the first set of quotes, ignoring trailing bash redirects
                     const quoteMatch = cmd.match(/^["'](.*?)["']/);
                     if (quoteMatch) {
@@ -341,30 +430,42 @@ async function solveProblem(problemId, questionText) {
                         // Fallback: strip standard bash redirects if there were no quotes
                         cmd = cmd.split(' 2>')[0].split(' >')[0].trim();
                     }
-                    
+
                     console.log(`\n    [Manual Tool Intercept] Calling API -> Device: ${device}, Command: ${cmd}`);
-                    
+
                     try {
                         const cacheKey = `${device}\n${cmd}`;
                         let output;
                         const wasCached = commandCache.has(cacheKey);
                         if (wasCached) {
                             output = commandCache.get(cacheKey);
+                            repeatedCommands.push(`${device} ${cmd}`);
                             console.log(`    [Command Cache Hit] Reused previous output`);
                         } else {
                             output = await executeNetworkCommand(device, cmd, problemId);
                             commandCache.set(cacheKey, output);
                         }
+                        commandLog.push({ device, command: cmd, output });
+                        outputs.push(`$ execute_network_command.js ${device} "${cmd}"\n${output}`);
 
                         console.log(`    [Tool Result] success\n`);
-                        const repeatedCommandHint = wasCached
-                            ? '\nYou repeated a command that was already run. Do not repeat it again; either run a different focused command or finalize with the evidence already collected.'
-                            : '';
-                        currentPrompt = `Command Executed Successfully. Output:\n\`\`\`\n${output}\n\`\`\`${repeatedCommandHint}\nAnalyze the output and decide your next step.`;
                     } catch (err) {
                         console.log(`    [Tool Result] error\n`);
-                        currentPrompt = `Command Failed. Error:\n\`\`\`\n${err.message}\n\`\`\`\nPlease fix the command and try again.`;
+                        outputs.push(`$ execute_network_command.js ${device} "${cmd}"\nERROR: ${err.message}`);
                     }
+                }
+
+                if (outputs.length > 0) {
+                    const repeatedCommandHint = repeatedCommands.length > 0
+                        ? `\nYou repeated ${repeatedCommands.length} command(s) that were already run. Do not repeat them again; either run a different focused command or finalize with the evidence already collected.`
+                        : '';
+                    const ignoredHint = cmdLines.length > 3
+                        ? `\nOnly the first 3 network commands in your bash block were executed. Put at most 3 focused commands in one block.`
+                        : '';
+                    const invalidHint = invalidCommands.length > 0
+                        ? `\nSome lines were ignored because they were not valid execute_network_command.js calls: ${invalidCommands.join(' | ')}`
+                        : '';
+                    currentPrompt = `Command${outputs.length > 1 ? 's' : ''} Executed Successfully. Output:\n\`\`\`\n${outputs.join('\n\n')}\n\`\`\`${repeatedCommandHint}${ignoredHint}${invalidHint}\nAnalyze the output and decide your next step.`;
                 } else {
                     // It's a bash command but not a valid network command format.
                     console.log(`\n    [Manual Tool Intercept] Invalid command format: ${commandToRun}`);

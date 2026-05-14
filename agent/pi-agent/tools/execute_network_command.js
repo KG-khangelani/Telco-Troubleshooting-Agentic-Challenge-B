@@ -28,6 +28,37 @@ function normalizeCommand(cmd) {
     let normalized = cmd.trim();
     // Normalize pipe spaces
     normalized = normalized.replace(/\s+\|\s+/g, ' | ');
+    // The challenge API exposes pre-collected command outputs, not a shell.
+    // Strip local filtering/specific lookup variants to their supported base commands.
+    if (normalized.includes('|')) {
+        normalized = normalized.split('|')[0].trim();
+    }
+
+    const parameterlessCommands = [
+        'display ip routing-table',
+        'display mac-address',
+        'display interface brief',
+        'display interface description',
+        'display lldp neighbor brief',
+        'display current-configuration',
+        'display ip interface brief',
+        'display stp brief',
+        'display arp',
+        'show ip route',
+        'show ip arp',
+        'show ip interface brief',
+        'show lldp neighbors',
+        'show mac address-table',
+        'show running-config'
+    ];
+
+    const lowered = normalized.toLowerCase();
+    for (const base of parameterlessCommands) {
+        if (lowered.startsWith(`${base.toLowerCase()} `)) {
+            return base;
+        }
+    }
+
     return normalized;
 }
 
@@ -52,6 +83,7 @@ export async function executeNetworkCommand(deviceName, command, questionNumber)
     const baseDelayMs = 2000;
 
     const normalizedCmd = normalizeCommand(command);
+    const apiCommand = normalizedCmd;
     const isLldp = normalizedCmd.includes('lldp neighbor');
     const cacheKey = `${deviceName}:${normalizedCmd}`;
 
@@ -67,7 +99,7 @@ export async function executeNetworkCommand(deviceName, command, questionNumber)
                 headers: headers,
                 body: JSON.stringify({
                     device_name: deviceName,
-                    command: command,
+                    command: apiCommand,
                     question_number: String(questionNumber)
                 })
             });
